@@ -1,5 +1,5 @@
 # zkill-ml
-AI and spaceships baby
+AI and spaceships, baby
 
 ## Dependencies
 ```requests``` and ```requests-cache```, both available in pip.
