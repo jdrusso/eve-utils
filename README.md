@@ -27,7 +27,7 @@ Each killmail is analyzed, and the following attributes are stored in a ```Killm
 - Cargo bay contents
 
 ### ML
-Next step is to actually use these to train an ML model, and see if I can generate fittings.
+Next step is to actually use these to train an ML model, and see if I can predict fitting quality.
 It's a little tricky, since I'm just dealing with losses, so I need to determine a metric for good performance.
 
 I think this will be really hard to do for solo kills, because you have no idea how close they got. 
