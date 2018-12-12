@@ -8,7 +8,7 @@ Don't be a commie, use Python 3.
 
 ## Components
 
-### zkill-scraper
+### zkill_scraper
 ```scraper.py``` contains a zkill scraper that will go through all the kills from a certain date. 
 
 Each killmail is analyzed, and the following attributes are stored in a ```Killmail``` object with the following attributes:
@@ -26,5 +26,5 @@ Each killmail is analyzed, and the following attributes are stored in a ```Killm
 - Drone bay contents
 - Cargo bay contents
 
-### system-finder
+### system_finder
 Finds systems that meet a certain criteria (dead-end lowsec systems surrounded by highsec currently) and lists them, along with their distances from a certain system.
