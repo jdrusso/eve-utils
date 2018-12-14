@@ -10,17 +10,85 @@
 # For each system, get everything it's connected to
 # Build a dict of "system": "adjacent"
 
-import requests_cache, redis
+import requests_cache, redis, sys
 from graph_tool.all import *
 from eve_utils import *
 
 
+class VisitorExample(DFSVisitor):
+
+    def __init__(self, name):
+        self.name = name
+        self.visited = []
+        self.depth = 0
+        self.backtracking = False
+
+    # def start_vertex(self, u):
+    #     self.visited.append(u)
+
+    def back_edge(self, e):
+        # print("Back edge")
+        # print([self.name[x] for x in self.visited])
+        print("Found back edge from %s to %s" % (self.name[e.source()], self.name[e.target()]))
+        # if not self.backtracking:
+        #     visited = [self.name[x] for x in self.visited]
+        #     print("\nCurrent cycle was: %s \n" % visited)
+        self.backtracking = True
+        # #
+        # print("Popping %s" % [self.name[x] for x in self.visited][-1])
+        # self.visited.pop()
+        # self.backtracking = True
+
+    def discover_vertex(self, u):
+        print("-->", self.name[u], "has been discovered!")
+        if self.name[u] == 'Gare': #####DEBUGGING ########
+            sys.exit(-1)
+        self.visited.append(u)
+        self.depth += 1
+        self.backtracking = False
+
+        # self.backtracking = False
+
+
+    def examine_edge(self, e):
+        print("\n%s -> %s" % (self.name[e.source()], self.name[e.target()]))
+        pass
+        # if self.backtracking == True:
+            # self.visited.pop()
+        # print("\n")
+        print([self.name[x] for x in self.visited])
+
+
+        # if len(self.visited) > 1 and e.target() == self.visited[-2]:
+        #     if self.backtracking == False:
+        #         print("Retracing, current cycle was %s" % ([self.name[x] for x in self.visited]))
+        #     self.visited.pop()
+        #     self.depth -= 1
+        #     self.backtracking=True
+        #
+        # print("Appending %s" % self.name[e.source()])
+        # self.visited.append(e.source())
+
+    def tree_edge(self, e):
+        print("Tress")
+        pass
+        # print("Tree...")# % \
+            #(self.name[e.source()], self.name[e.target()]))
+
+
+        # print("Appending %s" % self.name[e.target()])
+        # self.visited.append(e.source())
+
+        # print([self.name[x] for x in self.visited])
+
+
 if __name__=="__main__":
 
+    osti_id = 30003792
 
     requests_cache.install_cache('graph_cache', backend="redis")
 
-    region_ids = ["10000048"] # Placid
+    region_ids = ["10000048"]#, "10000051", "10000041", "10000023", "10000069", "10000064", "10000068"] # Placid
 
     systems = []
 
@@ -94,23 +162,21 @@ if __name__=="__main__":
     # At this point, I have a list of all the systems in a region.
     # Go through them, find connections
 
+    # Remove highsec
+    sdict = {x:sdict[x] for x in sdict.keys() if sdict[x]['sec'] < 0.45}
+
 
     # Build the graph
     print("Generating graph.")
-
     graph = Graph(directed=False)
 
-    # Add all the vertices
-    # vertices = [graph.add_vertex() for system in systems]
+
+    # Add all the vertices with properties
     vprop_names = graph.new_vertex_property("string")
     vprop_sec = graph.new_vertex_property("float")
     vprop_kills = graph.new_vertex_property("int")
     vprop_jumps = graph.new_vertex_property("int")
     for system in sdict.keys():
-
-        # If system is highsec:
-        if sdict[system]['sec'] >= 0.45:
-            continue
 
         sdict[system]['vertex'] = graph.add_vertex()
         vprop_names[sdict[system]['vertex']] = sdict[system]['name']
@@ -125,31 +191,30 @@ if __name__=="__main__":
 
     # Add edges
     for system in sdict.keys():
+        source = sdict[system]['vertex']
+
         for adjacent in sdict[system]['adjacent']:
             try:
-                graph.add_edge(sdict[system]['vertex'], sdict[adjacent]['vertex'])
+                target = sdict[adjacent]['vertex']
             except KeyError:
-                pass
-            # adjacent is the system ID of the adjacent
+                continue # Not in the selected regions
+
+            if (graph.edge(source, target) == None) and (graph.edge(target,source) == None):
+                graph.add_edge(source, target)
+
+    time = graph.new_vertex_property('int')
+    pred = graph.new_vertex_property('int64_t')
+    visitor = VisitorExample(vprop_names)
+
+    # Do search:
+    dfs_search(graph, source=sdict[osti_id]['vertex'], visitor=visitor)
 
     # Draw graph
-    # graph_draw(graph,
-    #     vertex_text=vprop_names,
-    #     vertex_size=vprop_size,
-    #     vertex_font_size=10,
-    #     output_size=(1200,768),
-    #     edge_pen_width=24,
-    #     output="graph.png")
     graphviz_draw(graph,
-        # vertex_text=vprop_names,
         vsize=vprop_size,
         size=(100,100),
         overlap="prism",
         ratio='fill',
-        # vertex_font_size=10,
-        # output_size=(1200,768),
-        # edge_pen_width=24,
         vprops={'label':vprop_names},
         vcolor=prop_to_size(vprop_jumps, ma=1),
-        # sep=1,
         output="graph.png")
