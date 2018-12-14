@@ -4,8 +4,11 @@ from queue import Queue
 from threading import Thread, Lock
 import pickle
 
+from eve_utils import requests_retry_session
+
 # Used in parse_item() to go from slot IDs to slot names for self.fitting entries
 SLOTS = ["low", "mid", "high"]
+
 
 
 #TODO: Add a wrapper function for API requests that can do error handling
@@ -68,7 +71,7 @@ Fitting:\
 # TODO: prob rework this into the above-mentioned wrapper tbh
 def pull_date(date):
 
-    r = requests.get('https://zkillboard.com/api/history/%s/' % date)
+    r = requests_retry_session().get('https://zkillboard.com/api/history/%s/' % date)
     json_data = r.json()
 
     return json_data
@@ -106,7 +109,7 @@ def parse_item(km, item):
         slot = SLOTS[slotID]
 
         # But check to see if this is ammo loaded in a mod, and ignore if so
-        r = requests.get('https://esi.evetech.net/latest/universe/types/%s/?datasource=tranquility&language=en-us' % item['item_type_id'], timeout=5)
+        r = requests_retry_session().get('https://esi.evetech.net/latest/universe/types/%s/?datasource=tranquility&language=en-us' % item['item_type_id'], timeout=5)
         r = r.json()
 
         # Check a few obvious ones
@@ -157,11 +160,16 @@ def get_fight_info(system, time, km, char):
     char_id = char
     # print("Looking at char %d" % char_id)
 
-    related_request = requests.get(\
+    related_request = requests_retry_session().get(\
         'https://zkillboard.com/api/related/{sys}/{time}/'.format(\
         sys=system, time=time), timeout=5)
 
     related_data = related_request.json()
+
+    # Returned empty
+    if type(related_data) == list:
+        raise Exception
+
 
     # HACK: The following sections are unbelievably janky, but so is the zKill
     #   battle report API. Sometimes it returns an empty result, and querying a
@@ -170,35 +178,35 @@ def get_fight_info(system, time, km, char):
     #   into shape.
 
     ########## Primary fallback ##########
-    if related_data == []:
-        raise Exception
-
-        with requests_cache.disabled():
-            # Add those unnecessary two zeros
-            related_request = requests.get(\
-                'https://zkillboard.com/api/related/{sys}/{time}/'.format(\
-                sys=system, time=time + '00'), timeout=5)
-
-            related_data = related_request.json()
-
-    ########## Secondary fallback ##########
-    if related_data == []:
-
-        # Increment the hours by 1, and make another request. S U P E R dodgy
-        #   solution because worst case you're just getting straight up different
-        #   BRs.
-        t2 = int(time[-4:-2])
-        t2 = '{0:02d}'.format(t2 + 1) + '00'
-
-        with requests_cache.disabled():
-            related_request = requests.get(\
-                'https://zkillboard.com/api/related/{sys}/{time}/'.format(\
-                sys=system, time=time[:-4] + t2), timeout=5)
-
-            related_data = related_request.json()
-
-        if related_data == []:
-            raise Exception
+    # if related_data == []:
+    #     raise Exception
+    #
+    #     with requests_cache.disabled():
+    #         # Add those unnecessary two zeros
+    #         related_request = requests_retry_session().get(\
+    #             'https://zkillboard.com/api/related/{sys}/{time}/'.format(\
+    #             sys=system, time=time + '00'), timeout=5)
+    #
+    #         related_data = related_request.json()
+    #
+    # ########## Secondary fallback ##########
+    # if related_data == []:
+    #
+    #     # Increment the hours by 1, and make another request. S U P E R dodgy
+    #     #   solution because worst case you're just getting straight up different
+    #     #   BRs.
+    #     t2 = int(time[-4:-2])
+    #     t2 = '{0:02d}'.format(t2 + 1) + '00'
+    #
+    #     with requests_cache.disabled():
+    #         related_request = requests_retry_session().get(\
+    #             'https://zkillboard.com/api/related/{sys}/{time}/'.format(\
+    #             sys=system, time=time[:-4] + t2), timeout=5)
+    #
+    #         related_data = related_request.json()
+    #
+    #     if related_data == []:
+    #         raise Exception
 
     # 1. Find which team  the ship we're looking at was on
     team = ''
@@ -249,7 +257,7 @@ def get_kill_info(id, hash):
 
 
     # Pull various stats from zKill (points, ISK value)
-    zkill_request = requests.get('https://zkillboard.com/api/killID/%s/' % id, timeout=5)
+    zkill_request = requests_retry_session().get('https://zkillboard.com/api/killID/%s/' % id, timeout=5)
     zkill_data = zkill_request.json()[0]
 
     # If it was an awox, fuck this
@@ -261,7 +269,7 @@ def get_kill_info(id, hash):
 
 
     # Pull damage taken and items from the Eve API
-    esi_request = requests.get(
+    esi_request = requests_retry_session().get(
         'https://esi.evetech.net/dev/killmails/%s/%s/?datasource=tranquility'
         % (id, hash), timeout=5)
     esi_data = esi_request.json()
@@ -299,11 +307,12 @@ def get_kill_info(id, hash):
             # The killmail was probably generated by a structure
             raise KeyError
 
-        except Exception:
+        except Exception as e:
             # This error is generally propagated up from a bad request
             #   in get_fight_info. The BR's cache as empty results, and
             #   there's not much I can do about that.
-            raise Exception
+            # print("\nException: %s \n" % e)
+            raise e
 
     return km
 
@@ -328,7 +337,7 @@ def process_ids(id_queue, kill_queue, key_errors, other_errors, json_data, lock)
             lock.release()
 
         # This isn't great -- usually it's due to fight BRs not being generated.
-        except Exception:
+        except Exception as e:
             lock.acquire()
             other_errors[0] += 1
             lock.release()
@@ -348,7 +357,7 @@ def process_ids(id_queue, kill_queue, key_errors, other_errors, json_data, lock)
 if __name__=="__main__":
 
     # Initialize the cache so we don't shit up zKill with requests
-    requests_cache.install_cache('zKill_cache')
+    requests_cache.install_cache('zKill_cache', backend='redis')
 
 
     # Pull zKill data
@@ -356,7 +365,7 @@ if __name__=="__main__":
     print("Pulling kill data for %s" % date)
     json_data = pull_date(date)
 
-    num_threads=500
+    num_threads = 20
 
     processed = 0
     # Store these in a list so they can be passed by reference to the thread
