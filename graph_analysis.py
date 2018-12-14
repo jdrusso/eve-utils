@@ -19,67 +19,38 @@ class VisitorExample(DFSVisitor):
 
     def __init__(self, name):
         self.name = name
+        self.routes = []
         self.visited = []
-        self.depth = 0
-        self.backtracking = False
+        self.current = None
 
-    # def start_vertex(self, u):
-    #     self.visited.append(u)
 
+    # If you've found a loop, record the stack
     def back_edge(self, e):
-        # print("Back edge")
-        # print([self.name[x] for x in self.visited])
-        print("Found back edge from %s to %s" % (self.name[e.source()], self.name[e.target()]))
-        # if not self.backtracking:
-        #     visited = [self.name[x] for x in self.visited]
-        #     print("\nCurrent cycle was: %s \n" % visited)
-        self.backtracking = True
-        # #
-        # print("Popping %s" % [self.name[x] for x in self.visited][-1])
-        # self.visited.pop()
-        # self.backtracking = True
 
+        self.routes.append(self.visited)
+
+    # If I've found a new vertex, add it to the stack
     def discover_vertex(self, u):
-        print("-->", self.name[u], "has been discovered!")
-        if self.name[u] == 'Gare': #####DEBUGGING ########
-            sys.exit(-1)
+        # print("-->", self.name[u], "has been discovered!")
         self.visited.append(u)
-        self.depth += 1
-        self.backtracking = False
+        self.current = u
 
-        # self.backtracking = False
-
-
+    # Upon looking along a new edge
     def examine_edge(self, e):
-        print("\n%s -> %s" % (self.name[e.source()], self.name[e.target()]))
-        pass
-        # if self.backtracking == True:
-            # self.visited.pop()
-        # print("\n")
-        print([self.name[x] for x in self.visited])
 
+        # If I've moved...
+        if not e.source() == self.current:
 
-        # if len(self.visited) > 1 and e.target() == self.visited[-2]:
-        #     if self.backtracking == False:
-        #         print("Retracing, current cycle was %s" % ([self.name[x] for x in self.visited]))
-        #     self.visited.pop()
-        #     self.depth -= 1
-        #     self.backtracking=True
-        #
-        # print("Appending %s" % self.name[e.source()])
-        # self.visited.append(e.source())
+            self.current = e.source()
 
-    def tree_edge(self, e):
-        print("Tress")
-        pass
-        # print("Tree...")# % \
-            #(self.name[e.source()], self.name[e.target()]))
-
-
-        # print("Appending %s" % self.name[e.target()])
-        # self.visited.append(e.source())
-
-        # print([self.name[x] for x in self.visited])
+            # If I've already visited this vertex, pop everything past it from
+            #   the stack.
+            if e.source() in self.visited:
+                idx = self.visited.index(e.source())
+                self.visited = self.visited[:idx]
+            # If I haven't, add it to the stack.
+            else:
+                self.visited.append(e.source())
 
 
 if __name__=="__main__":
@@ -88,7 +59,7 @@ if __name__=="__main__":
 
     requests_cache.install_cache('graph_cache', backend="redis")
 
-    region_ids = ["10000048"]#, "10000051", "10000041", "10000023", "10000069", "10000064", "10000068"] # Placid
+    region_ids = ["10000048", "10000051", "10000041", "10000023", "10000069", "10000064", "10000068"] # Placid
 
     systems = []
 
@@ -191,23 +162,92 @@ if __name__=="__main__":
 
     # Add edges
     for system in sdict.keys():
+        # if sdict[system]['name'] == "Covryn":
+        #
+        #     print("\nanalyzing system %s" % sdict[system]['name'])
+        #     print("Adjacent are %s" % sdict[system]['adjacent'])
+
         source = sdict[system]['vertex']
 
         for adjacent in sdict[system]['adjacent']:
+            # if debug:
+            #     print(sdict[adjacent][])
             try:
                 target = sdict[adjacent]['vertex']
             except KeyError:
                 continue # Not in the selected regions
 
+            # if sdict[system]['name'] == "Covryn":
+            #     print("making edge to %s" % vprop_names[target])
+
             if (graph.edge(source, target) == None) and (graph.edge(target,source) == None):
                 graph.add_edge(source, target)
 
-    time = graph.new_vertex_property('int')
-    pred = graph.new_vertex_property('int64_t')
     visitor = VisitorExample(vprop_names)
 
-    # Do search:
+    # Do search to obtain all cycles
     dfs_search(graph, source=sdict[osti_id]['vertex'], visitor=visitor)
+    routes = visitor.routes
+
+    # Clean up routes to make sure they all have the right starting location
+    #   TODO: Why does my search sometimes not include the starting location?
+    for route in routes:
+        if route == []:
+            continue
+        if not route[0] == sdict[osti_id]['vertex']:
+            route.insert(0,sdict[osti_id]['vertex'])
+
+    # Make sure only unique paths are stored.
+    #   I apologize sincerely for this set comprehension. I did it because:
+    #   - Casting a list to a set is a nice way to ensure that only unique
+    #     elements are kept
+    #   - "routes" is a list of lists -- list are mutable, and so unhashable.
+    #   - A set must be constructed of hashable elements
+    # So, the solution is to cast each of the sub-lists to a tuple, and then
+    #   build the set from that.
+    routes = set(tuple(route) for route in routes)
+    print("Found %d unique paths" % len(routes))
+
+    # Now analyze the cycles, and calculate the node weights for each
+    best_route = []
+    max_kills = 0
+    for route in routes:
+
+        route_names = [vprop_names[s] for s in route]
+        route_kills = sum([vprop_kills[s] for s in route])
+        route_jumps = sum([vprop_jumps[s] for s in route])
+
+        # print("Route: %s \n\t Total kills: %d \n\t Total jumps: %d" % \
+        #     (route_names, route_kills, route_jumps))
+
+        if route_kills > max_kills:
+            best_route = route
+            max_kills = route_kills
+
+    print("Most active route was: %s \n\t with %d kills and %d jumps " %
+        ([vprop_names[s] for s in best_route],
+        max_kills,
+        sum([vprop_jumps[s] for s in best_route])))
+
+    # vprop_onroute = graph.new_vertex_property("bool")
+    # for v in graph.vertices():
+    #     if v in best_route:
+    #         vprop_onroute[v] = True
+    #     else:
+    #         vprop_onroute[v] = False
+
+    eprop_onroute = graph.new_edge_property("bool")
+    # Detect which edges are along the route
+    for e in graph.edges():
+        if e.source() in best_route and e.target() in best_route:
+            eprop_onroute[e] = 6
+        else:
+            eprop_onroute[e] = 1
+
+    # Draw the route
+    # graph.set_edge_filter(eprop_onroute)
+
+
 
     # Draw graph
     graphviz_draw(graph,
@@ -216,5 +256,6 @@ if __name__=="__main__":
         overlap="prism",
         ratio='fill',
         vprops={'label':vprop_names},
+        penwidth=eprop_onroute,
         vcolor=prop_to_size(vprop_jumps, ma=1),
         output="graph.png")
