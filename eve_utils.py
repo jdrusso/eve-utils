@@ -34,6 +34,25 @@ def get_endpoint(endpoint):
         '/?datasource=tranquility&language=en-us').format(endpoint=endpoint)
 
     c_request = requests_retry_session().get(request_string)
+    # c_request = requests.get(request_string)
+
+    # print("Cached: %s" % c_request.from_cache)
+
+    return c_request.json()
+
+# This return the result of a POST to the given endpoint, with the necessary
+#   url added before and after
+def post_endpoint(endpoint, data):
+
+    request_string = \
+        ('https://esi.evetech.net/latest'
+        '{endpoint}'
+        '/?datasource=tranquility&language=en-us').format(endpoint=endpoint)
+
+    c_request = requests_retry_session().post(request_string, data = data)
+    # c_request = requests.post(request_string, data = data)
+
+    # print("Cached: %s" % c_request.from_cache)
 
     return c_request.json()
 
