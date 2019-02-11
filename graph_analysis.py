@@ -16,7 +16,7 @@ from graph_tool.all import *
 from eve_utils import *
 
 
-class VisitorExample(DFSVisitor):
+class DFS(DFSVisitor):
 
     def __init__(self, name):
         self.name = name
@@ -191,7 +191,7 @@ if __name__=="__main__":
             if (graph.edge(source, target) == None) and (graph.edge(target,source) == None):
                 graph.add_edge(source, target)
 
-    visitor = VisitorExample(vprop_names)
+    visitor = DFS(vprop_names)
 
     # Do search to obtain all cycles
     dfs_search(graph, source=sdict[osti_id]['vertex'], visitor=visitor)
