@@ -4,6 +4,8 @@ A set of utilities for various tasks in Eve
 ## Dependencies
 ```requests``` and ```requests-cache```, both available in pip.
 
+```graph-tool``` available at https://git.skewed.de/count0/graph-tool
+
 Don't be a commie, use Python 3.
 
 ## Components
@@ -25,6 +27,3 @@ Each killmail is analyzed, and the following attributes are stored in a ```Killm
 - TypeIDs of all modules in low, mid, and high slots
 - Drone bay contents
 - Cargo bay contents
-
-### system_finder
-Finds systems that meet a certain criteria (dead-end lowsec systems surrounded by highsec currently) and lists them, along with their distances from a certain system.
